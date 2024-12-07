@@ -10,7 +10,8 @@ MetaFace is a research project exploring meta-learning approaches to mitigate bi
 - Create reproducible benchmarks for evaluating fairness in face recognition
 
 ## Key training parameters (Prototypical Models)
---dataset_root      # Path to dataset
+```
+--dataset_root      # Path to dataset 
 --experiment_root   # Output directory
 --epochs           # Number of training epochs
 --learning_rate    # Initial learning rate
@@ -18,3 +19,4 @@ MetaFace is a research project exploring meta-learning approaches to mitigate bi
 --classes_per_it_tr # Number of classes per training episode
 --num_support_tr   # Number of support samples per class
 --num_query_tr     # Number of query samples per class
+```
