@@ -10,7 +10,7 @@ from tqdm import tqdm
 from utils.sampler import PrototypicalBatchSampler
 from utils.loss import prototypical_loss as loss_fn
 from datasets.demogpairs import DemogPairsDataset
-from models.vgg16 import VGG16Encoder as ProtoNet
+from models.resnet50 import PrototypicalResNet50 as ProtoNet
 from config import parse_args
 from torchvision import transforms
 
@@ -89,9 +89,15 @@ def init_model(opt):
     """Initialize the ProtoNet."""
     device = "cuda:0" if torch.cuda.is_available() and opt.cuda else "cpu"
     model = ProtoNet(
-        in_channels=3, feature_dim=512, use_batch_norm=True  # RGB images
-    ).to(device)
-    return model
+        freeze_backbone=False,
+        weights=None,
+        pooling_type="adaptive_avg",
+        projection_hidden_dim=1024,
+        embedding_dim=512,
+        normalize=False,
+    )
+
+    return model.to(device)
 
 
 def init_optim(opt, model):
@@ -123,6 +129,9 @@ def train(opt, tr_dataloader, model, optim, lr_scheduler, val_dataloader=None):
     best_acc = 0
 
     experiment_root = Path(opt.experiment_root)
+    # make a run specific directory
+    experiment_root = experiment_root / f"run_{len(list(experiment_root.iterdir()))}"
+    experiment_root.mkdir(exist_ok=True, parents=True)
     best_model_path = experiment_root / "best_model.pth"
     last_model_path = experiment_root / "last_model.pth"
 
