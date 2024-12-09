@@ -10,7 +10,8 @@ from tqdm import tqdm
 from utils.sampler import PrototypicalBatchSampler
 from utils.loss import prototypical_loss as loss_fn
 from datasets.demogpairs import DemogPairsDataset
-from models.resnet50 import PrototypicalResNet50 as ProtoNet
+from models.proto_net import ProtoNet
+from datasets.bupt_cbface import BUPTCBFaceDataset
 from config import parse_args
 from torchvision import transforms
 
@@ -36,13 +37,13 @@ def get_transforms():
     )
 
 
-def init_dataset(opt, mode, force_new_split=False):
-    """Initialize dataset."""
-    dataset = DemogPairsDataset(
+def init_dataloader(opt, dataset_class, root, mode, force_new_split=False):
+    """Initialize data loader."""
+    dataset = dataset_class(
         mode=mode,
-        root=opt.dataset_root,
+        root=root,
         transform=get_transforms(),
-        cache_images=True,
+        cache_images=False,  # Avoid OOM errors
         force_new_split=force_new_split,
     )
 
@@ -58,138 +59,94 @@ def init_dataset(opt, mode, force_new_split=False):
             f"for classes_per_it_val ({opt.classes_per_it_val})"
         )
 
-    return dataset
-
-
-def init_sampler(opt, labels, mode):
-    """Initialize prototypical batch sampler."""
-    if "train" in mode:
-        classes_per_it = opt.classes_per_it_tr
-        num_samples = opt.num_support_tr + opt.num_query_tr
-    else:
-        classes_per_it = opt.classes_per_it_val
-        num_samples = opt.num_support_val + opt.num_query_val
-
-    return PrototypicalBatchSampler(
-        labels=labels,
-        classes_per_it=classes_per_it,
-        num_samples=num_samples,
+    sampler = PrototypicalBatchSampler(
+        labels=dataset.targets,
+        classes_per_it=(
+            opt.classes_per_it_tr if mode == "train" else opt.classes_per_it_val
+        ),
+        num_samples=(
+            opt.num_support_tr + opt.num_query_tr
+            if mode == "train"
+            else opt.num_support_val + opt.num_query_val
+        ),
         iterations=opt.iterations,
     )
 
-
-def init_dataloader(opt, mode, force_new_split=False):
-    """Initialize data loader."""
-    dataset = init_dataset(opt, mode, force_new_split)
-    sampler = init_sampler(opt, dataset.targets, mode)
     return DataLoader(dataset, batch_sampler=sampler, num_workers=opt.num_workers)
 
 
 def init_model(opt):
     """Initialize the ProtoNet."""
     device = "cuda:0" if torch.cuda.is_available() and opt.cuda else "cpu"
-    model = ProtoNet(
-        freeze_backbone=False,
-        weights=None,
-        pooling_type="adaptive_avg",
-        projection_hidden_dim=1024,
-        embedding_dim=512,
-        normalize=False,
-    )
-
+    model = ProtoNet(x_dim=3, hid_dim=64, z_dim=64)
     return model.to(device)
 
 
-def init_optim(opt, model):
-    """Initialize optimizer."""
-    return torch.optim.Adam(params=model.parameters(), lr=opt.learning_rate)
-
-
-def init_lr_scheduler(opt, optim):
-    """Initialize learning rate scheduler."""
-    return torch.optim.lr_scheduler.StepLR(
-        optimizer=optim, gamma=opt.lr_scheduler_gamma, step_size=opt.lr_scheduler_step
-    )
-
-
-def save_list_to_file(path, thelist):
-    """Save list to file."""
-    with open(path, "w") as f:
-        for item in thelist:
-            f.write(f"{item}\n")
-
-
-def train(opt, tr_dataloader, model, optim, lr_scheduler, val_dataloader=None):
-    """Train the model with the prototypical learning algorithm."""
+def train_multi_task(opt, dataloaders, model, optim, lr_scheduler):
+    """Train the model with multiple tasks."""
     device = "cuda:0" if torch.cuda.is_available() and opt.cuda else "cpu"
-    best_state = None if val_dataloader is None else None
-
-    train_loss, train_acc = [], []
-    val_loss, val_acc = [], []
-    best_acc = 0
+    best_states = {}
+    metrics = {
+        task: {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+        for task in dataloaders.keys()
+    }
+    best_accs = {task: 0 for task in dataloaders.keys()}
 
     experiment_root = Path(opt.experiment_root)
     # make a run specific directory
     experiment_root = experiment_root / f"run_{len(list(experiment_root.iterdir()))}"
     experiment_root.mkdir(exist_ok=True, parents=True)
-    best_model_path = experiment_root / "best_model.pth"
-    last_model_path = experiment_root / "last_model.pth"
 
     for epoch in range(opt.epochs):
         print(f"=== Epoch: {epoch} ===")
 
-        # Training phase
-        model.train()
-        for batch in tqdm(tr_dataloader, desc="Training"):
-            optim.zero_grad()
-            x, y = [t.to(device) for t in batch]
-            model_output = model(x)
-            loss, acc = loss_fn(model_output, target=y, n_support=opt.num_support_tr)
-            loss.backward()
-            optim.step()
-            train_loss.append(loss.item())
-            train_acc.append(acc.item())
+        for task, (tr_dataloader, val_dataloader) in dataloaders.items():
+            print(f"Task: {task}")
 
-        avg_loss = np.mean(train_loss[-opt.iterations :])
-        avg_acc = np.mean(train_acc[-opt.iterations :])
-        print(f"Avg Train Loss: {avg_loss:.4f}, Avg Train Acc: {avg_acc:.4f}")
+            # Training
+            model.train()
+            for batch in tqdm(tr_dataloader, desc=f"Training {task}"):
+                optim.zero_grad()
+                x, y = [t.to(device) for t in batch]
+                model_output = model(x)
+                loss, acc = loss_fn(
+                    model_output, target=y, n_support=opt.num_support_tr
+                )
+                loss.backward()
+                optim.step()
+                metrics[task]["train_loss"].append(loss.item())
+                metrics[task]["train_acc"].append(acc.item())
+
+            avg_loss = np.mean(metrics[task]["train_loss"][-opt.iterations :])
+            avg_acc = np.mean(metrics[task]["train_acc"][-opt.iterations :])
+            print(f"Avg Train Loss: {avg_loss:.4f}, Avg Train Acc: {avg_acc:.4f}")
+
+            # Validation
+            if val_dataloader is not None:
+                model.eval()
+                with torch.no_grad():
+                    for batch in val_dataloader:
+                        x, y = [t.to(device) for t in batch]
+                        model_output = model(x)
+                        loss, acc = loss_fn(
+                            model_output, target=y, n_support=opt.num_support_val
+                        )
+                        metrics[task]["val_loss"].append(loss.item())
+                        metrics[task]["val_acc"].append(acc.item())
+
+                avg_loss = np.mean(metrics[task]["val_loss"][-opt.iterations :])
+                avg_acc = np.mean(metrics[task]["val_acc"][-opt.iterations :])
+
+                if avg_acc >= best_accs[task]:
+                    best_states[task] = model.state_dict()
+                    best_accs[task] = avg_acc
+                    torch.save(
+                        model.state_dict(), experiment_root / f"best_model_{task}.pth"
+                    )
+
         lr_scheduler.step()
 
-        # Validation phase
-        if val_dataloader is not None:
-            model.eval()
-            with torch.no_grad():
-                for batch in val_dataloader:
-                    x, y = [t.to(device) for t in batch]
-                    model_output = model(x)
-                    loss, acc = loss_fn(
-                        model_output, target=y, n_support=opt.num_support_val
-                    )
-                    val_loss.append(loss.item())
-                    val_acc.append(acc.item())
-
-                avg_loss = np.mean(val_loss[-opt.iterations :])
-                avg_acc = np.mean(val_acc[-opt.iterations :])
-                postfix = (
-                    " (Best)" if avg_acc >= best_acc else f" (Best: {best_acc:.4f})"
-                )
-                print(
-                    f"Avg Val Loss: {avg_loss:.4f}, Avg Val Acc: {avg_acc:.4f}{postfix}"
-                )
-
-                if avg_acc >= best_acc:
-                    torch.save(model.state_dict(), best_model_path)
-                    best_acc = avg_acc
-                    best_state = model.state_dict()
-
-    # Save final model
-    torch.save(model.state_dict(), last_model_path)
-
-    # Save metrics
-    for name in ["train_loss", "train_acc", "val_loss", "val_acc"]:
-        save_list_to_file(experiment_root / f"{name}.txt", locals()[name])
-
-    return best_state, best_acc, train_loss, train_acc, val_loss, val_acc
+    return best_states, best_accs, metrics
 
 
 @torch.no_grad()
@@ -213,48 +170,56 @@ def test(opt, test_dataloader, model):
 
 def main():
     """Main training function."""
-    # Parse arguments
     options = parse_args()
-
-    # Create experiment directory
-    experiment_root = Path(options.experiment_root)
-    experiment_root.mkdir(parents=True, exist_ok=True)
-
-    # CUDA warning
-    if torch.cuda.is_available() and not options.cuda:
-        print("WARNING: CUDA device available but not used (--cuda not set)")
-
-    # Initialize everything
     init_seed(options)
 
-    # Create dataloaders (force new split only for first run)
-    tr_dataloader = init_dataloader(options, "train", force_new_split=True)
-    val_dataloader = init_dataloader(options, "val")
-    test_dataloader = init_dataloader(options, "test")
+    # Dictionary of datasets and their configurations
+    dataset_configs = {
+        "demog_pairs": {
+            "dataset_class": DemogPairsDataset,
+            "root": "../datasets/demogpairs/DemogPairs",
+        },
+        "bupt_cbface": {
+            "dataset_class": BUPTCBFaceDataset,
+            "root": "../datasets/bupt_cbface/BUPT-CBFace-12",
+        },
+    }
 
-    # Initialize model and training components
+    # Initialize dataloaders for each task
+    dataloaders = {}
+    for task_name, config in dataset_configs.items():
+        dataloaders[task_name] = (
+            init_dataloader(
+                options, config["dataset_class"], config["root"], "train", True
+            ),
+            init_dataloader(options, config["dataset_class"], config["root"], "val"),
+        )
+
     model = init_model(options)
-    optim = init_optim(options, model)
-    lr_scheduler = init_lr_scheduler(options, optim)
+    optim = torch.optim.Adam(params=model.parameters(), lr=options.learning_rate)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer=optim,
+        gamma=options.lr_scheduler_gamma,
+        step_size=options.lr_scheduler_step,
+    )
 
-    # Train model
-    res = train(
+    # Train model on multiple tasks
+    best_states, best_accs, metrics = train_multi_task(
         opt=options,
-        tr_dataloader=tr_dataloader,
-        val_dataloader=val_dataloader,
+        dataloaders=dataloaders,
         model=model,
         optim=optim,
         lr_scheduler=lr_scheduler,
     )
-    best_state, best_acc, train_loss, train_acc, val_loss, val_acc = res
 
-    # Test both last and best models
-    print("Testing with last model...")
-    test(opt=options, test_dataloader=test_dataloader, model=model)
-
-    print("Testing with best model...")
-    model.load_state_dict(best_state)
-    test(opt=options, test_dataloader=test_dataloader, model=model)
+    # Test on each task
+    for task_name, config in dataset_configs.items():
+        print(f"\nTesting on {task_name}...")
+        test_dataloader = init_dataloader(
+            options, config["dataset_class"], config["root"], "test"
+        )
+        model.load_state_dict(best_states[task_name])
+        test(opt=options, test_dataloader=test_dataloader, model=model)
 
 
 if __name__ == "__main__":

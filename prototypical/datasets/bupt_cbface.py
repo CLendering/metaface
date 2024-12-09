@@ -1,36 +1,46 @@
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Tuple, Optional
 import torch
-from torch.utils.data import Dataset
 from PIL import Image
 import numpy as np
 from torchvision import transforms
 import random
+import json
 import os
 import sys
 
-# add the 'prototypical' directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-from prototypical.utils.sampler import PrototypicalBatchSampler
-from prototypical.datasets.base_dataset import BaseMetaDataset
-import json
+from datasets.base_dataset import BaseMetaDataset
 
 
-class DemogPairsDataset(BaseMetaDataset):
-    """Dataset loader for DemogPairs demographic face pairs dataset."""
+class BUPTCBFaceDataset(BaseMetaDataset):
+    """Dataset loader for BUPT-CBFace dataset."""
 
     def __init__(
         self,
         mode: str = "train",
-        root: str = "../datasets/demogpairs/DemogPairs",
+        root: str = "../datasets/bupt_cbface/BUPT-CBFace-12",
         transform: Optional[transforms.Compose] = None,
         target_transform: Optional[transforms.Compose] = None,
-        cache_images: bool = True,
+        cache_images: bool = False,
         train_ratio: float = 0.7,
         val_ratio: float = 0.15,
         seed: int = 42,
         force_new_split: bool = False,
     ):
+        """Initialize BUPT-CBFace dataset.
+
+        Args:
+            mode: Dataset split ('train', 'val', or 'test')
+            root: Root directory containing the dataset
+            transform: Transformations to apply to images
+            target_transform: Transformations to apply to labels
+            cache_images: Whether to cache images in memory
+            train_ratio: Proportion of data for training
+            val_ratio: Proportion of data for validation
+            seed: Random seed for reproducibility
+            force_new_split: Whether to force creation of new splits
+        """
         super().__init__(mode, transform, target_transform)
 
         self.root = Path(root)
@@ -56,18 +66,16 @@ class DemogPairsDataset(BaseMetaDataset):
             self.images = self._cache_images()
 
     def _create_splits(self, train_ratio: float, val_ratio: float) -> None:
-        """Create random splits of the dataset.
-
-        Args:
-            train_ratio: Proportion of data for training
-            val_ratio: Proportion of data for validation
-        """
-        # Get all person folders
-        all_persons = [
-            d.name
-            for d in self.root.iterdir()
-            if d.is_dir() and not d.name.startswith(".")
+        """Create random splits of the dataset."""
+        # Get all ethnicity folders
+        ethnicity_folders = [
+            d for d in self.root.iterdir() if d.is_dir() and not d.name.startswith(".")
         ]
+
+        all_persons = []
+        for ethnicity_folder in ethnicity_folders:
+            person_folders = [d for d in ethnicity_folder.iterdir() if d.is_dir()]
+            all_persons.extend([d.relative_to(self.root) for d in person_folders])
 
         # Randomly shuffle persons
         random.shuffle(all_persons)
@@ -79,9 +87,9 @@ class DemogPairsDataset(BaseMetaDataset):
 
         # Create splits
         splits = {
-            "train": all_persons[:n_train],
-            "val": all_persons[n_train : n_train + n_val],
-            "test": all_persons[n_train + n_val :],
+            "train": [str(p) for p in all_persons[:n_train]],
+            "val": [str(p) for p in all_persons[n_train : n_train + n_val]],
+            "test": [str(p) for p in all_persons[n_train + n_val :]],
         }
 
         # Save splits
@@ -100,11 +108,7 @@ class DemogPairsDataset(BaseMetaDataset):
         return splits[self.mode]
 
     def _find_items(self) -> List[Tuple[str, str, str]]:
-        """Find all valid image files and their corresponding classes.
-
-        Returns:
-            List of tuples (filename, person_id, full_path)
-        """
+        """Find all valid image files and their corresponding classes."""
         items = []
         for person_id in self.classes:
             person_dir = self.root / person_id
@@ -148,8 +152,7 @@ class DemogPairsDataset(BaseMetaDataset):
             if self.cache_images:
                 self.image_cache[path] = img
 
-        # Convert to tensor and normalize
-        img = transforms.ToTensor()(img)
+        img = np.array(img)
 
         if self.transform:
             img = self.transform(img)
@@ -173,55 +176,10 @@ class DemogPairsDataset(BaseMetaDataset):
         """Get dataset size."""
         return len(self.all_items)
 
-    def get_person_id(self, idx: int) -> str:
-        """Get person ID from class index."""
-        return self.classes[idx]
-
 
 if __name__ == "__main__":
-    # Create datasets
-    train_dataset = DemogPairsDataset(
-        mode="train",
-        root="../datasets/demogpairs/DemogPairs",
-        transform=transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.Resize(84),
-                transforms.CenterCrop(84),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        ),
-        cache_images=True,
-        force_new_split=True,  # Only use this for first run
-    )
-
-    val_dataset = DemogPairsDataset(
-        mode="val",
-        root="../datasets/demogpairs/DemogPairs",
-        transform=transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.Resize(84),
-                transforms.CenterCrop(84),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        ),
-    )
-
-    # Create data loaders
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_sampler=PrototypicalBatchSampler(
-            labels=train_dataset.targets,
-            classes_per_it=60,
-            num_samples=10,
-            iterations=100,
-        ),
-        num_workers=4,
-    )
+    dataset = BUPTCBFaceDataset(mode="train", transform=transforms.Resize((84, 84)))
+    print(len(dataset))
+    img, target = dataset[0]
+    print(img.shape, target)
+    img.show()

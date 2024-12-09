@@ -164,7 +164,7 @@ def get_parser() -> argparse.ArgumentParser:
         "-nqVa",
         "--num_query_val",
         type=int,
-        default=10,
+        default=7,
         help="number of samples per class to use as query for validation",
     )
 
