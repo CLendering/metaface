@@ -102,13 +102,13 @@ def main(
     demog_valid_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
     demog_test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
 
-    vgg_face_2_train_dataset = VGGFace2Dataset(mode='train', root="data/vggface2/data", force_new_split=False)
-    vgg_face_2_val_dataset = VGGFace2Dataset(mode='val', root="data/vggface2/data", force_new_split=False)
-    vgg_face_2_test_dataset = VGGFace2Dataset(mode='test', root="data/vggface2/data", force_new_split=False)
+    # vgg_face_2_train_dataset = VGGFace2Dataset(mode='train', root="data/vggface2/data", force_new_split=False)
+    # vgg_face_2_val_dataset = VGGFace2Dataset(mode='val', root="data/vggface2/data", force_new_split=False)
+    # vgg_face_2_test_dataset = VGGFace2Dataset(mode='test', root="data/vggface2/data", force_new_split=False)
     
-    vgg_face_2_meta_train_dataset = l2l.data.MetaDataset(vgg_face_2_train_dataset)
-    vgg_face_2_meta_valid_dataset = l2l.data.MetaDataset(vgg_face_2_val_dataset)
-    vgg_face_2_meta_test_dataset = l2l.data.MetaDataset(vgg_face_2_test_dataset)
+    # vgg_face_2_meta_train_dataset = l2l.data.MetaDataset(vgg_face_2_train_dataset)
+    # vgg_face_2_meta_valid_dataset = l2l.data.MetaDataset(vgg_face_2_val_dataset)
+    # vgg_face_2_meta_test_dataset = l2l.data.MetaDataset(vgg_face_2_test_dataset)
 
 
     start_time = time.time()
@@ -180,8 +180,7 @@ def main(
     #     embedding_size=64*4,
     # )
     model = Resnet18Model(
-        hidden_size=64,
-        embedding_size=64*4,
+        embedding_size=512,
         output_size=ways,
         dropout_p=0.2,
     )

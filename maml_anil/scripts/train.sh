@@ -11,4 +11,4 @@
 export WANDB_API_KEY=APIDATAKEY
 
 # Run your Python training script
-python maml_anil/train.py --iterations 2000 --patience 100 --use_wandb
+python maml_anil/train.py --iterations 2000 --patience 100 --use_wandb --adaptation-steps 5
