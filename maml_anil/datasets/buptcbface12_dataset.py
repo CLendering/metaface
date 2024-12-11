@@ -55,9 +55,15 @@ class BUPTCBFaceDataset(BaseMetaDataset):
         random.seed(seed)
         np.random.seed(seed)
 
+        bookkeeping_path = os.path.join(self.root, 'buptcbface12-bookkeeping-' + mode + '.pkl')
+
         self.splits_file = self.root / "splits.json"
         if force_new_split or not self.splits_file.exists():
             self._create_splits(train_ratio, val_ratio)
+
+            # Delete bookkeeping file if it exists
+            if os.path.exists(bookkeeping_path):
+                os.remove(bookkeeping_path)
 
         self.classes = self._load_split()
         self.all_items = self._find_items()
@@ -66,6 +72,8 @@ class BUPTCBFaceDataset(BaseMetaDataset):
         self.paths, self.targets = self._prepare_data()
         if cache_images:
             self.images = self._cache_images()
+
+        self._bookkeeping_path = bookkeeping_path
 
     def _create_splits(self, train_ratio: float, val_ratio: float) -> None:
         """Create random splits of the dataset."""

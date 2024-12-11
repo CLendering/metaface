@@ -65,9 +65,15 @@ class VGGFace2Dataset(BaseMetaDataset):
         random.seed(seed)
         np.random.seed(seed)
 
+        bookkeeping_path = os.path.join(self.root, 'vggface2-bookkeeping-' + mode + '.pkl')
+
         self.splits_file = self.root / "train_val_splits.json"
         if force_new_split or not self.splits_file.exists():
             self._create_splits(val_ratio)
+
+            # Delete bookkeeping file if it exists
+            if os.path.exists(bookkeeping_path):
+                os.remove(bookkeeping_path)
 
         self.image_paths, self.targets = self._load_split()
         self.class_to_idx = {
@@ -81,6 +87,9 @@ class VGGFace2Dataset(BaseMetaDataset):
             f"Loaded {self.mode} split: {len(self.image_paths)} images, "
             f"{len(self.class_to_idx)} classes"
         )
+
+        self._bookkeeping_path = bookkeeping_path
+
 
     def _create_splits(self, val_ratio: float):
         """Create train/val splits from train folder and use val folder for test."""

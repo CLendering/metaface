@@ -1,13 +1,16 @@
+import time
 import torch
 import torch.nn as nn
 import numpy as np
 import random
 import learn2learn as l2l
 from learn2learn.data.transforms import FusedNWaysKShots, LoadData, RemapLabels, ConsecutiveLabels
+from models.resnet import Resnet18Model
 from models.simple_cnn import SimpleCNN
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
 from datasets.demogpairs_dataset import DemogPairsDataset
 from config import parse_args
+import wandb
 
 def accuracy(predictions, targets):
     predictions = predictions.argmax(dim=1).view(targets.shape)
@@ -57,42 +60,68 @@ def main(
     number_valid_tasks=600,
     number_test_tasks=600,
     patience=10,  # Number of iterations to wait for improvement
-    save_path='best_feature_extractor.pth'
+    save_path='best_feature_extractor.pth',
+    debug_mode=False,
+    use_wandb=False
 ):
+    
+    if use_wandb:
+        wandb.init(
+            project="ibb-maml-anil",
+            entity="benchmark_bros",
+            config={
+                "meta_learning_rate": meta_learning_rate,
+                "fast_learning_rate": fast_learning_rate,
+                "adaptation_steps": adaptation_steps,
+                "meta_batch_size": meta_batch_size,
+                "iterations": iterations,
+                "number_train_tasks": number_train_tasks,
+                "number_valid_tasks": number_valid_tasks,
+                "number_test_tasks": number_test_tasks,
+            },
+        )
+
     use_cuda = bool(use_cuda)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    device = torch.device('cpu')
-    if use_cuda and torch.cuda.device_count():
-        torch.cuda.manual_seed(seed)
+    
+    if use_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
     # Load datasets
-    bupt_train_dataset = BUPTCBFaceDataset(mode='train', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=True)
-    bupt_valid_dataset = BUPTCBFaceDataset(mode='val', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=True)
-    bupt_test_dataset = BUPTCBFaceDataset(mode='test', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=True)
+    bupt_train_dataset = BUPTCBFaceDataset(mode='train', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=False)
+    bupt_valid_dataset = BUPTCBFaceDataset(mode='val', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=False)
+    bupt_test_dataset = BUPTCBFaceDataset(mode='test', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=False)
 
-    demog_train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=True)
-    demog_valid_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=True)
-    demog_test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=True)
+    demog_train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+    demog_valid_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+    demog_test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
 
+    start_time = time.time()
     bupt_meta_train_dataset = l2l.data.MetaDataset(bupt_train_dataset)
     bupt_meta_valid_dataset = l2l.data.MetaDataset(bupt_valid_dataset)
     bupt_meta_test_dataset = l2l.data.MetaDataset(bupt_test_dataset)
-
+    print('Time to load BUPT META datasets:', time.time() - start_time)
+    
+    start_time = time.time()
     demog_meta_train_dataset = l2l.data.MetaDataset(demog_train_dataset)
     demog_meta_valid_dataset = l2l.data.MetaDataset(demog_valid_dataset)
     demog_meta_test_dataset = l2l.data.MetaDataset(demog_test_dataset)
+    print('Time to load DEMOG META datasets:', time.time() - start_time)
+    
 
     train_datasets = [bupt_meta_train_dataset, demog_meta_train_dataset]
     valid_datasets = [bupt_meta_valid_dataset, demog_meta_valid_dataset]
     test_datasets = [bupt_meta_test_dataset, demog_meta_test_dataset]
 
+    start_time = time.time()
     union_train = l2l.data.UnionMetaDataset(train_datasets)
     union_valid = l2l.data.UnionMetaDataset(valid_datasets)
     union_test = l2l.data.UnionMetaDataset(test_datasets)
-
+    print('Time to load UNION META datasets:', time.time() - start_time)
     if len(union_train.labels_to_indices) == len(bupt_meta_train_dataset.labels_to_indices) + len(demog_meta_train_dataset.labels_to_indices):
         print('Union dataset is working properly')
     else:
@@ -107,7 +136,7 @@ def main(
     train_tasks = l2l.data.Taskset(
         union_train,
         task_transforms=train_transforms,
-        num_tasks=number_train_tasks,
+        num_tasks=number_train_tasks if not debug_mode else 50,
     )
 
     valid_transforms = [
@@ -119,7 +148,7 @@ def main(
     valid_tasks = l2l.data.Taskset(
         union_valid,
         task_transforms=valid_transforms,
-        num_tasks=number_valid_tasks,
+        num_tasks=number_valid_tasks if not debug_mode else 50,
     )
 
     test_transforms = [
@@ -131,13 +160,19 @@ def main(
     test_tasks = l2l.data.Taskset(
         union_test,
         task_transforms=test_transforms,
-        num_tasks=number_test_tasks,
+        num_tasks=number_test_tasks if not debug_mode else 50,
     )
 
-    model = SimpleCNN(
-        output_size=ways,
+    # model = SimpleCNN(
+    #     output_size=ways,
+    #     hidden_size=64,
+    #     embedding_size=64*4,
+    # )
+    model = Resnet18Model(
         hidden_size=64,
         embedding_size=64*4,
+        output_size=ways,
+        dropout_p=0.2,
     )
     feature_extractor = model.features
     #feature_extractor.load_state_dict(torch.load("best_feature_extractor.pth", map_location=device)) #######################
@@ -218,6 +253,14 @@ def main(
         print('Meta Test Error:', meta_test_valid_error)
         print('Meta Test Accuracy:', meta_test_valid_accuracy)
 
+        if use_wandb:
+            wandb.log({
+                "meta_train_error": meta_train_error / meta_batch_size,
+                "meta_train_accuracy": meta_train_accuracy / meta_batch_size,
+                "meta_test_error": meta_test_valid_error,
+                "meta_test_accuracy": meta_test_valid_accuracy,
+            })
+
         # Early stopping logic
         if meta_test_error < best_meta_test_error:
             print(f"New best meta-test error ({best_meta_test_error} -> {meta_test_error}). Saving feature extractor.")
@@ -248,4 +291,6 @@ if __name__ == '__main__':
         number_valid_tasks=options.number_valid_tasks,
         number_test_tasks=options.number_test_tasks,
         patience=options.patience,
+        debug_mode=options.debug_mode,
+        use_wandb=options.use_wandb
     )
