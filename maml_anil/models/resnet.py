@@ -25,15 +25,13 @@ def add_dropout_to_conv_layers(module, dropout_p):
             add_dropout_to_conv_layers(child, dropout_p)
 
 class FeatureExtractor(nn.Module):
-    def __init__(self, input_channels=3, hidden_size=64, embedding_size=64, dropout_p=0.2):
+    def __init__(self, embedding_size=64, dropout_p=0.2):
         super(FeatureExtractor, self).__init__()
         self.features = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
         # Unfreeze all layers in the encoder
         for param in self.features.parameters():
             param.requires_grad = True
-        self.hidden_size = hidden_size
         self.embedding_size = embedding_size
-        self.input_channels = input_channels
 
         # Add dropout to convolutional layers without disrupting parameter tracking
         add_dropout_to_conv_layers(self.features, dropout_p)
@@ -50,6 +48,6 @@ class FeatureExtractor(nn.Module):
         return x
 
 class Resnet18Model(MAMLModel):
-    def __init__(self, input_channels=3, hidden_size=64, embedding_size=64, output_size=5, dropout_p=0.2):
-        features = FeatureExtractor(input_channels, hidden_size, embedding_size, dropout_p)
+    def __init__(self, embedding_size=64, output_size=5, dropout_p=0.2):
+        features = FeatureExtractor(embedding_size, dropout_p)
         super(Resnet18Model, self).__init__(features, embedding_size, output_size)
