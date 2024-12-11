@@ -44,6 +44,11 @@ class DemogPairsDataset(BaseMetaDataset):
 
         bookkeeping_path = os.path.join(self.root.parent, 'demogpairs-bookkeeping-' + mode + '.pkl')
 
+        if os.path.exists(bookkeeping_path):
+            print(f"Bookkeeping file found at {bookkeeping_path}")
+        else:
+            print(f"Bookkeeping file not found at {bookkeeping_path}")
+            
         self.splits_file = self.root.parent / "splits.json"
 
         if force_new_split or not self.splits_file.exists():

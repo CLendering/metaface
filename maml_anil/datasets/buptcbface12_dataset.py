@@ -57,6 +57,11 @@ class BUPTCBFaceDataset(BaseMetaDataset):
 
         bookkeeping_path = os.path.join(self.root, 'buptcbface12-bookkeeping-' + mode + '.pkl')
 
+        if os.path.exists(bookkeeping_path):
+            print(f"Bookkeeping file found at {bookkeeping_path}")
+        else:
+            print(f"Bookkeeping file not found at {bookkeeping_path}")
+            
         self.splits_file = self.root / "splits.json"
         if force_new_split or not self.splits_file.exists():
             self._create_splits(train_ratio, val_ratio)

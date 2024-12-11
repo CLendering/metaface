@@ -67,6 +67,11 @@ class VGGFace2Dataset(BaseMetaDataset):
 
         bookkeeping_path = os.path.join(self.root, 'vggface2-bookkeeping-' + mode + '.pkl')
 
+        if os.path.exists(bookkeeping_path):
+            print(f"Bookkeeping file found at {bookkeeping_path}")
+        else:
+            print(f"Bookkeeping file not found at {bookkeeping_path}")
+            
         self.splits_file = self.root / "train_val_splits.json"
         if force_new_split or not self.splits_file.exists():
             self._create_splits(val_ratio)

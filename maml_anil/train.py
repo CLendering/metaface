@@ -5,6 +5,7 @@ import numpy as np
 import random
 import learn2learn as l2l
 from learn2learn.data.transforms import FusedNWaysKShots, LoadData, RemapLabels, ConsecutiveLabels
+from models.camile_net import CamileNet
 from models.resnet import Resnet18Model
 from models.simple_cnn import SimpleCNN
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
@@ -174,15 +175,21 @@ def main(
         num_tasks=number_test_tasks if not debug_mode else 50,
     )
 
-    # model = SimpleCNN(
-    #     output_size=ways,
-    #     hidden_size=64,
-    #     embedding_size=64*4,
-    # )
-    model = Resnet18Model(
-        embedding_size=512,
+    model = SimpleCNN(
         output_size=ways,
-        dropout_p=0.2,
+        hidden_size=64,
+        embedding_size=64*4,
+    )
+    # model = Resnet18Model(
+    #     embedding_size=512,
+    #     output_size=ways,
+    #     dropout_p=0.2,
+    # )
+    model = CamileNet(
+        input_channels=3,
+        hidden_size=64,
+        embedding_size=64,
+        output_size=ways
     )
     feature_extractor = model.features
     #feature_extractor.load_state_dict(torch.load("best_feature_extractor.pth", map_location=device)) #######################
