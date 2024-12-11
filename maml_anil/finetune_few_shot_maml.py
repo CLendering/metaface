@@ -7,6 +7,7 @@ import learn2learn as l2l
 from learn2learn.data.transforms import FusedNWaysKShots, LoadData, RemapLabels, ConsecutiveLabels
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
 from datasets.demogpairs_dataset import DemogPairsDataset
+from datasets.vggface2_dataset import VGGFace2Dataset
 from models.simple_cnn import SimpleCNN
 
 def parse_args():
@@ -57,9 +58,14 @@ def main():
     # val_dataset = BUPTCBFaceDataset(mode='val', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=False)
     # test_dataset = BUPTCBFaceDataset(mode='test', root="data/bupt_balanced_face/BUPT-CBFace-12", cache_images=False, force_new_split=False)
 
-    train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
-    val_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
-    test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+    # train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+    # val_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+    # test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+
+    train_dataset = VGGFace2Dataset(mode='train', root="data/vggface2/data", force_new_split=False)
+    val_dataset = VGGFace2Dataset(mode='val', root="data/vggface2/data", force_new_split=False)
+    test_dataset = VGGFace2Dataset(mode='test', root="data/vggface2/data", force_new_split=False)
+
     combined_meta = l2l.data.UnionMetaDataset([
         l2l.data.MetaDataset(train_dataset),
         l2l.data.MetaDataset(val_dataset),

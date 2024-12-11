@@ -199,7 +199,7 @@ def get_vggface2_loaders(
         val_transform=val_transforms,
         test_transform=val_transforms,
         val_ratio=val_ratio,
-        force_new_split=True,
+        force_new_split=False,
     )
 
     val_dataset = VGGFace2Dataset(

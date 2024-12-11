@@ -9,6 +9,8 @@ from models.resnet import Resnet18Model
 from models.simple_cnn import SimpleCNN
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
 from datasets.demogpairs_dataset import DemogPairsDataset
+from datasets.vggface2_dataset import VGGFace2Dataset
+
 from config import parse_args
 import wandb
 
@@ -99,6 +101,15 @@ def main(
     demog_train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
     demog_valid_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
     demog_test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+
+    vgg_face_2_train_dataset = VGGFace2Dataset(mode='train', root="data/vggface2/data", force_new_split=False)
+    vgg_face_2_val_dataset = VGGFace2Dataset(mode='val', root="data/vggface2/data", force_new_split=False)
+    vgg_face_2_test_dataset = VGGFace2Dataset(mode='test', root="data/vggface2/data", force_new_split=False)
+    
+    vgg_face_2_meta_train_dataset = l2l.data.MetaDataset(vgg_face_2_train_dataset)
+    vgg_face_2_meta_valid_dataset = l2l.data.MetaDataset(vgg_face_2_val_dataset)
+    vgg_face_2_meta_test_dataset = l2l.data.MetaDataset(vgg_face_2_test_dataset)
+
 
     start_time = time.time()
     bupt_meta_train_dataset = l2l.data.MetaDataset(bupt_train_dataset)

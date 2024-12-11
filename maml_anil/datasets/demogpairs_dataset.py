@@ -42,9 +42,10 @@ class DemogPairsDataset(BaseMetaDataset):
         random.seed(seed)
         np.random.seed(seed)
 
-        bookkeeping_path = os.path.join(self.root, 'demogpairs-bookkeeping-' + mode + '.pkl')
+        bookkeeping_path = os.path.join(self.root.parent, 'demogpairs-bookkeeping-' + mode + '.pkl')
 
-        self.splits_file = self.root / "splits.json"
+        self.splits_file = self.root.parent / "splits.json"
+
         if force_new_split or not self.splits_file.exists():
             self._create_splits(train_ratio, val_ratio)
 

@@ -34,7 +34,10 @@ def parse_args():
         help="Path to the saved feature extractor weights.",
     )
     parser.add_argument(
-        "--fine_tune", action="store_true", help="Fine-tune the feature extractor", default=True
+        "--fine_tune",
+        action="store_true",
+        help="Fine-tune the feature extractor",
+        default=True,
     )
     parser.add_argument(
         "--num_workers", type=int, default=4, help="Number of workers for DataLoader"
