@@ -9,7 +9,7 @@ from torchvision import transforms
 import tqdm
 from datasets.vggface2_dataset import VGGFace2Dataset
 from models.simple_cnn import SimpleCNN
-
+from models.camile_net import CamileNet
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -38,6 +38,12 @@ def parse_args():
         action="store_true",
         help="Fine-tune the feature extractor",
         default=True,
+    )
+    parser.add_argument(
+        "--unfreeze_fe_after_n_epochs",
+        type=int,
+        default=5,
+        help="Path to the saved feature extractor weights.",
     )
     parser.add_argument(
         "--num_workers", type=int, default=4, help="Number of workers for DataLoader"
@@ -150,8 +156,11 @@ def main():
     # Load feature extractor and initialize classifier
     # The feature_extractor in SimpleCNN uses an embedding of size 64*4 = 256 by default if set like before
     # Adjust embedding_size if it differs in your saved model
-    base_model = SimpleCNN(
-        output_size=num_classes, hidden_size=64, embedding_size=64 * 4
+    base_model = CamileNet(
+        input_channels=3,
+        hidden_size=64,
+        embedding_size=64,
+        output_size=num_classes
     )
     feature_extractor = base_model.features
 
@@ -164,10 +173,13 @@ def main():
 
     # Optionally, decide if you want to fine-tune the feature extractor or freeze it
     # To freeze feature extractor:
-    # for param in feature_extractor.parameters():
-    #     param.requires_grad = False
+    if not args.fine_tune or args.unfreeze_fe_after_n_epochs > 0:
+        for param in feature_extractor.parameters():
+            param.requires_grad = False
 
-    classifier = nn.Linear(64 * 4, num_classes).to(device)
+        print(f"Feature extractor frozen for {args.unfreeze_fe_after_n_epochs} epochs.")
+
+    classifier = nn.Linear(64, num_classes).to(device)
 
     # Combine feature_extractor + classifier into one model
     model = nn.Sequential(feature_extractor, classifier).to(device)
@@ -179,7 +191,17 @@ def main():
     patience_counter = 0
     best_state = None
 
+    
+    unfrozen_fe = False
     for epoch in range(args.epochs):
+        # Check if we should unfreeze the feature extractor
+        if args.unfreeze_fe_after_n_epochs > 0 and epoch == args.unfreeze_fe_after_n_epochs and not unfrozen_fe:
+            print("Unfreezing the feature extractor.")
+            for param in feature_extractor.parameters():
+                param.requires_grad = True
+
+            unfrozen_fe = True
+
         train_loss, train_acc = train_one_epoch(
             model, train_loader, device, optimizer, loss_fn
         )

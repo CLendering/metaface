@@ -13,6 +13,7 @@ from learn2learn.data.transforms import (
 from datasets.vggface2_dataset import VGGFace2Dataset
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
 from datasets.demogpairs_dataset import DemogPairsDataset
+from models.camile_net import CamileNet
 from models.simple_cnn import SimpleCNN
 
 
@@ -121,9 +122,12 @@ def main():
         force_new_split=False,
     )
 
+
     # train_dataset = DemogPairsDataset(mode='train', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
     # val_dataset = DemogPairsDataset(mode='val', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
     # test_dataset = DemogPairsDataset(mode='test', root="data/demogpairs/DemogPairs/DemogPairs", cache_images=False, force_new_split=False)
+
+    num_classes = train_dataset.num_classes
     combined_meta = l2l.data.UnionMetaDataset(
         [
             l2l.data.MetaDataset(train_dataset),
@@ -157,7 +161,7 @@ def main():
         )
 
         # Load the pre-trained feature extractor
-        base_model = SimpleCNN(output_size=ways, hidden_size=64, embedding_size=64 * 4)
+        base_model = CamileNet(output_size=ways, hidden_size=64, embedding_size=64)
         feature_extractor = base_model.features
         feature_extractor.load_state_dict(
             torch.load(args.feature_extractor_path, map_location=device)

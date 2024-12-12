@@ -8,6 +8,7 @@ from learn2learn.data.transforms import FusedNWaysKShots, LoadData, RemapLabels,
 from datasets.buptcbface12_dataset import BUPTCBFaceDataset
 from datasets.demogpairs_dataset import DemogPairsDataset
 from datasets.vggface2_dataset import VGGFace2Dataset
+from  models.camile_net import CamileNet
 from models.simple_cnn import SimpleCNN
 
 def parse_args():
@@ -20,6 +21,7 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_tasks', type=int, default=500, help='Number of tasks to sample and evaluate')
     parser.add_argument('--feature_extractor_path', type=str, default='best_feature_extractor.pth', help='Path to the saved feature extractor weights.')
+    
     return parser.parse_args()
 
 def accuracy(predictions, targets):
@@ -72,9 +74,11 @@ def main():
         l2l.data.MetaDataset(test_dataset),
     ])
 
+    num_classes = train_dataset.num_classes
+
     # We only need 2*K shots per class (K support + K query)
     transforms = [
-        FusedNWaysKShots(combined_meta, n=ways, k=2 * shots),
+        FusedNWaysKShots(combined_meta, n=num_classes, k=2 * shots),
         LoadData(combined_meta),
         RemapLabels(combined_meta),
         ConsecutiveLabels(combined_meta),
@@ -93,7 +97,12 @@ def main():
         support_data, support_labels, query_data, query_labels = split_support_query(data, labels, ways, shots)
 
         # Load the pre-trained feature extractor
-        base_model = SimpleCNN(output_size=ways, hidden_size=64, embedding_size=64*4)
+        base_model = CamileNet(
+            input_channels=3,
+            hidden_size=64,
+            embedding_size=64,
+            output_size=ways
+        )
         feature_extractor = base_model.features
         feature_extractor.load_state_dict(torch.load(args.feature_extractor_path, map_location=device))
         feature_extractor.to(device)

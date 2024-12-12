@@ -59,6 +59,7 @@ class DemogPairsDataset(BaseMetaDataset):
                 os.remove(bookkeeping_path)
 
         self.classes = self._load_split()
+        self.num_classes = len(self.classes)
         self.all_items = self._find_items()
         self.class_to_idx = self._index_classes()
 

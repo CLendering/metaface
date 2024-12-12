@@ -175,11 +175,11 @@ def main(
         num_tasks=number_test_tasks if not debug_mode else 50,
     )
 
-    model = SimpleCNN(
-        output_size=ways,
-        hidden_size=64,
-        embedding_size=64*4,
-    )
+    # model = SimpleCNN(
+    #     output_size=ways,
+    #     hidden_size=64,
+    #     embedding_size=64*4,
+    # )
     # model = Resnet18Model(
     #     embedding_size=512,
     #     output_size=ways,
@@ -192,7 +192,7 @@ def main(
         output_size=ways
     )
     feature_extractor = model.features
-    #feature_extractor.load_state_dict(torch.load("best_feature_extractor.pth", map_location=device)) #######################
+    # feature_extractor.load_state_dict(torch.load("best_feature_extractor.pth", map_location=device)) #######################
     head = model.classifier
     feature_extractor.to(device)
     head = l2l.algorithms.MAML(head, lr=fast_learning_rate)
